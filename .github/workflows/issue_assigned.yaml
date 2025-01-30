@@ -13,8 +13,8 @@ jobs:
           GH_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         run: |
           project_data=$(gh api graphql -f query='
-            query($org: String!, $projectNumber: Int!) {
-              organization(login: $org) {
+            query($projectNumber: Int!) {
+              viewer {
                 projectV2(number: $projectNumber) {
                   id
                   fields(first: 20) {
@@ -31,10 +31,11 @@ jobs:
                   }
                 }
               }
-            }' -f org="your-org" -f projectNumber=2)
-          projectId=$(echo "$project_data" | jq -r '.data.organization.projectV2.id')
-          statusFieldId=$(echo "$project_data" | jq -r '.data.organization.projectV2.fields.nodes[] | select(.name=="Status") | .id')
-          toDoOptionId=$(echo "$project_data" | jq -r '.data.organization.projectV2.fields.nodes[] | select(.name=="Status") | .options[] | select(.name=="To Do") | .id')
+            }
+          ' -F projectNumber=2)
+          projectId=$(echo "$project_data" | jq -r '.data.viewer.projectV2.id')
+          statusFieldId=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name=="Status") | .id')
+          toDoOptionId=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name=="Status") | .options[] | select(.name=="To Do") | .id')
           echo "projectId=$projectId" >> $GITHUB_ENV
           echo "statusFieldId=$statusFieldId" >> $GITHUB_ENV
           echo "toDoOptionId=$toDoOptionId" >> $GITHUB_ENV
