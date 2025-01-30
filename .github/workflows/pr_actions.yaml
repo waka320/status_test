@@ -105,7 +105,7 @@ jobs:
             item_id=$(add_to_project $pr_node_id)
             update_status "$item_id" "${{ env.TO_BE_MERGED_OPTION_ID }}"
           fi
-          
+
           issue_number=$(echo "${{ github.event.pull_request.body }}" | grep -oP '#\K\d+')
           if [[ -n "$issue_number" ]]; then
             issue_node_id=$(gh api graphql -f query='
@@ -118,7 +118,9 @@ jobs:
               }
             ' -F owner=${{ github.repository_owner }} -F repo=${{ github.event.repository.name }} -F number=$issue_number --jq '.data.repository.issue.id')
             issue_item_id=$(add_to_project $issue_node_id)
-            # Issueのステータスを "In Review" に設定
-            update_status "$issue_item_id" "${{ env.IN_REVIEW_OPTION_ID }}"
+            if [[ "${{ github.event.pull_request.merged }}" == "true" ]]; then
+              update_status "$issue_item_id" "${{ env.DONE_OPTION_ID }}"
+            elif [[ "${{ github.event.action }}" == "ready_for_review" ]]; then
+              update_status "$issue_item_id" "${{ env.IN_REVIEW_OPTION_ID }}"
+            fi
           fi
-          
