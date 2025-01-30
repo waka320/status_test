@@ -8,9 +8,6 @@ jobs:
   update_project_item:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
-
       - name: Generate Token
         id: generate-token
         uses: actions/create-github-app-token@v1
@@ -22,17 +19,13 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
-          gh api graphql -f query='
+          project_data=$(gh api graphql -f query='
             query($login: String!, $projectNumber: Int!) {
               user(login: $login) {
                 projectV2(number: $projectNumber) {
                   id
                   fields(first: 20) {
                     nodes {
-                      ... on ProjectV2Field {
-                        id
-                        name
-                      }
                       ... on ProjectV2SingleSelectField {
                         id
                         name
@@ -45,36 +38,25 @@ jobs:
                   }
                 }
               }
-            }' -f login=waka320 -F projectNumber=2 > project_data.json
+            }' -f login=waka320 -F projectNumber=2)
 
-          cat project_data.json
-          echo 'PROJECT_ID='$(jq '.data.user.projectV2.id' project_data.json) >> $GITHUB_ENV
-          echo 'STATUS_FIELD_ID='$(jq '.data.user.projectV2.fields.nodes[] | select(.name== "Status") | .id' project_data.json) >> $GITHUB_ENV
-          echo 'NO_ASSIGNEE_OPTION_ID='$(jq '.data.user.projectV2.fields.nodes[] | select(.name== "Status") | .options[] | select(.name=="No Assignee") |.id' project_data.json) >> $GITHUB_ENV
+          echo 'PROJECT_ID='$(echo "$project_data" | jq -r '.data.user.projectV2.id') >> $GITHUB_ENV
+          echo 'STATUS_FIELD_ID='$(echo "$project_data" | jq -r '.data.user.projectV2.fields.nodes[] | select(.name == "Status") | .id') >> $GITHUB_ENV
+          echo 'NO_ASSIGNEE_OPTION_ID='$(echo "$project_data" | jq -r '.data.user.projectV2.fields.nodes[] | select(.name == "Status") | .options[] | select(.name == "No Assignee") | .id') >> $GITHUB_ENV
 
-      - name: Add Issue to Project
+      - name: Add Issue to Project and Update Status
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
-          PROJECT_ID: ${{ env.PROJECT_ID }}
         run: |
-          item_id="$( gh api graphql -f query='
+          item_id=$(gh api graphql -f query='
             mutation($project:ID!, $content:ID!) {
               addProjectV2ItemById(input: {projectId: $project, contentId: $content}) {
                 item {
                   id
                 }
               }
-            }' -f project=$PROJECT_ID -f content=${{ github.event.issue.node_id }} --jq '.data.addProjectV2ItemById.item.id')"
-          echo 'ITEM_ID='$item_id >> $GITHUB_ENV
+            }' -f project=${{ env.PROJECT_ID }} -f content=${{ github.event.issue.node_id }} --jq '.data.addProjectV2ItemById.item.id')
 
-      - name: Update Issue Status
-        env:
-          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
-          PROJECT_ID: ${{ env.PROJECT_ID }}
-          ITEM_ID: ${{ env.ITEM_ID }}
-          STATUS_FIELD_ID: ${{ env.STATUS_FIELD_ID }}
-          NO_ASSIGNEE_OPTION_ID: ${{ env.NO_ASSIGNEE_OPTION_ID }}
-        run: |
           gh api graphql -f query='
             mutation($project: ID!, $item: ID!, $field: ID!, $option: String!) {
               updateProjectV2ItemFieldValue(input: {
@@ -89,4 +71,4 @@ jobs:
                   id
                 }
               }
-            }' -f project=$PROJECT_ID -f item=$ITEM_ID -f field=$STATUS_FIELD_ID -f option=$NO_ASSIGNEE_OPTION_ID --silent
+            }' -f project=${{ env.PROJECT_ID }} -f item=$item_id -f field=${{ env.STATUS_FIELD_ID }} -f option=${{ env.NO_ASSIGNEE_OPTION_ID }} --silent
