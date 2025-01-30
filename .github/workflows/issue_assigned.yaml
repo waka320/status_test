@@ -36,7 +36,7 @@ jobs:
 
           echo "PROJECT_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.id')" >> $GITHUB_ENV
           echo "STATUS_FIELD_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name == "Status") | .id')" >> $GITHUB_ENV
-          echo "TODO_OPTION_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name == "Status") | .options[] | select(.name == "To Do") | .id')" >> $GITHUB_ENV
+          echo "TODO_OPTION_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name == "Status") | .options[] | select(.name == "Todo") | .id')" >> $GITHUB_ENV
 
       - name: Update Issue Status
         env:
@@ -57,4 +57,4 @@ jobs:
                 }
               }
             }
-          ' -F project=${{ env.PROJECT_ID }} -F item=${{ github.event.issue.node_id }} -F field=${{ env.STATUS_FIELD_ID }} -F option=${{ env.TODO_OPTION_ID }} --silent
+          ' -F project=${{ env.PROJECT_ID }} -f item=$item_id -F field=${{ env.STATUS_FIELD_ID }} -F option=${{ env.TODO_OPTION_ID }} --silent
