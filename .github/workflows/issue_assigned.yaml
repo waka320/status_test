@@ -33,27 +33,28 @@ jobs:
               }
             }
           ' -F projectNumber=2)
-          projectId=$(echo "$project_data" | jq -r '.data.viewer.projectV2.id')
-          statusFieldId=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name=="Status") | .id')
-          toDoOptionId=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name=="Status") | .options[] | select(.name=="To Do") | .id')
-          echo "projectId=$projectId" >> $GITHUB_ENV
-          echo "statusFieldId=$statusFieldId" >> $GITHUB_ENV
-          echo "toDoOptionId=$toDoOptionId" >> $GITHUB_ENV
+
+          echo "PROJECT_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.id')" >> $GITHUB_ENV
+          echo "STATUS_FIELD_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name == "Status") | .id')" >> $GITHUB_ENV
+          echo "TODO_OPTION_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name == "Status") | .options[] | select(.name == "To Do") | .id')" >> $GITHUB_ENV
 
       - name: Update Issue Status
         env:
           GH_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         run: |
           gh api graphql -f query='
-            mutation($projectId: ID!, $itemId: ID!, $statusFieldId: ID!, $optionId: ID!) {
+            mutation($project: ID!, $item: ID!, $field: ID!, $option: ID!) {
               updateProjectV2ItemFieldValue(input: {
-                projectId: $projectId
-                itemId: $itemId
-                fieldId: $statusFieldId
-                value: { singleSelectOptionId: $optionId }
+                projectId: $project
+                itemId: $item
+                fieldId: $field
+                value: {
+                  singleSelectOptionId: $option
+                }
               }) {
                 projectV2Item {
                   id
                 }
               }
-            }' -f projectId="$projectId" -f itemId="${{ github.event.issue.node_id }}" -f statusFieldId="$statusFieldId" -f optionId="$toDoOptionId"
+            }
+          ' -f project=${{ env.PROJECT_ID }} -f item=${{ github.event.issue.node_id }} -f field=${{ env.STATUS_FIELD_ID }} -f option=${{ env.TODO_OPTION_ID }} --silent
