@@ -8,11 +8,30 @@ jobs:
   update_project_item:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Install dependencies
+        run: npm install @actions/github
+
+      - name: Get GitHub App Token
+        id: get-github-app-token
+        run: |
+          node -e "
+          const { getOctokit, getToken } = require('@actions/github');
+          const token = await getToken({
+            appId: process.env.APP_ID,
+            privateKey: process.env.PRIVATE_KEY,
+            installationId: process.env.INSTALLATION_ID
+          });
+          console.log(`::set-output name=token::${token}`);
+          "
+
       - name: Get Project Info
         uses: actions/github-script@v6
         id: get-project-info
         with:
-          github-token: ${{secrets.GITHUB_TOKEN}}
+          github-token: ${{ steps.get-github-app-token.outputs.token }}
           script: |
             const query = `
               query($login: String!, $projectNumber: Int!) {
@@ -48,7 +67,7 @@ jobs:
         uses: actions/github-script@v6
         id: add-to-project
         with:
-          github-token: ${{secrets.GITHUB_TOKEN}}
+          github-token: ${{ steps.get-github-app-token.outputs.token }}
           script: |
             const { projectId } = ${{ steps.get-project-info.outputs.result }};
             const mutation = `
@@ -72,7 +91,7 @@ jobs:
       - name: Update Issue Status
         uses: actions/github-script@v6
         with:
-          github-token: ${{secrets.GITHUB_TOKEN}}
+          github-token: ${{ steps.get-github-app-token.outputs.token }}
           script: |
             const { projectId, statusFieldId, noAssigneeOptionId } = ${{ steps.get-project-info.outputs.result }};
             const itemId = ${{ steps.add-to-project.outputs.result }};
