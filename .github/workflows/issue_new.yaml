@@ -12,100 +12,80 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Generate Token
-        id: app-token
+        id: generate-token
         uses: actions/create-github-app-token@v1
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.PRIVATE_KEY }}
-          installation-id: ${{ secrets.INSTALLATION_ID }}
 
       - name: Get Project Info
-        uses: actions/github-script@v6
-        id: get-project-info
-        with:
-          github-token: ${{ steps.app-token.outputs.token }}
-          script: |
-            const query = `
-              query($login: String!, $projectNumber: Int!) {
-                user(login: $login) {
-                  projectV2(number: $projectNumber) {
-                    id
-                    fields(first: 20) {
-                      nodes {
-                        ... on ProjectV2SingleSelectField {
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+        run: |
+          gh api graphql -f query='
+            query($login: String!, $projectNumber: Int!) {
+              user(login: $login) {
+                projectV2(number: $projectNumber) {
+                  id
+                  fields(first: 20) {
+                    nodes {
+                      ... on ProjectV2Field {
+                        id
+                        name
+                      }
+                      ... on ProjectV2SingleSelectField {
+                        id
+                        name
+                        options {
                           id
                           name
-                          options {
-                            id
-                            name
-                          }
                         }
                       }
                     }
                   }
                 }
               }
-            `;
-            const result = await github.graphql(query, {
-              login: "waka320",
-              projectNumber: 2
-            });
-            const projectId = result.user.projectV2.id;
-            const statusField = result.user.projectV2.fields.nodes.find(field => field.name === "Status");
-            const noAssigneeOption = statusField.options.find(option => option.name === "No Assignee");
-            return { projectId, statusFieldId: statusField.id, noAssigneeOptionId: noAssigneeOption.id };
+            }' -f login=waka320 -F projectNumber=2 > project_data.json
+
+          echo 'PROJECT_ID='$(jq '.data.user.projectV2.id' project_data.json) >> $GITHUB_ENV
+          echo 'STATUS_FIELD_ID='$(jq '.data.user.projectV2.fields.nodes[] | select(.name== "Status") | .id' project_data.json) >> $GITHUB_ENV
+          echo 'NO_ASSIGNEE_OPTION_ID='$(jq '.data.user.projectV2.fields.nodes[] | select(.name== "Status") | .options[] | select(.name=="No Assignee") |.id' project_data.json) >> $GITHUB_ENV
 
       - name: Add Issue to Project
-        uses: actions/github-script@v6
-        id: add-to-project
-        with:
-          github-token: ${{ steps.app-token.outputs.token }}
-          script: |
-            const { projectId } = ${{ steps.get-project-info.outputs.result }};
-            const mutation = `
-              mutation($projectId: ID!, $contentId: ID!) {
-                addProjectV2ItemById(input: {
-                  projectId: $projectId
-                  contentId: $contentId
-                }) {
-                  item {
-                    id
-                  }
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          PROJECT_ID: ${{ env.PROJECT_ID }}
+        run: |
+          item_id="$( gh api graphql -f query='
+            mutation($project:ID!, $content:ID!) {
+              addProjectV2ItemById(input: {projectId: $project, contentId: $content}) {
+                item {
+                  id
                 }
               }
-            `;
-            const result = await github.graphql(mutation, {
-              projectId: projectId,
-              contentId: context.payload.issue.node_id
-            });
-            return result.addProjectV2ItemById.item.id;
+            }' -f project=$PROJECT_ID -f content=${{ github.event.issue.node_id }} --jq '.data.addProjectV2ItemById.item.id')"
+          echo 'ITEM_ID='$item_id >> $GITHUB_ENV
 
       - name: Update Issue Status
-        uses: actions/github-script@v6
-        with:
-          github-token: ${{ steps.app-token.outputs.token }}
-          script: |
-            const { projectId, statusFieldId, noAssigneeOptionId } = ${{ steps.get-project-info.outputs.result }};
-            const itemId = ${{ steps.add-to-project.outputs.result }};
-            const mutation = `
-              mutation($projectId: ID!, $itemId: ID!, $statusFieldId: ID!, $optionId: String!) {
-                updateProjectV2ItemFieldValue(input: {
-                  projectId: $projectId
-                  itemId: $itemId
-                  fieldId: $statusFieldId
-                  value: {
-                    singleSelectOptionId: $optionId
-                  }
-                }) {
-                  projectV2Item {
-                    id
-                  }
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          PROJECT_ID: ${{ env.PROJECT_ID }}
+          ITEM_ID: ${{ env.ITEM_ID }}
+          STATUS_FIELD_ID: ${{ env.STATUS_FIELD_ID }}
+          NO_ASSIGNEE_OPTION_ID: ${{ env.NO_ASSIGNEE_OPTION_ID }}
+        run: |
+          gh api graphql -f query='
+            mutation($project: ID!, $item: ID!, $field: ID!, $option: String!) {
+              updateProjectV2ItemFieldValue(input: {
+                projectId: $project
+                itemId: $item
+                fieldId: $field
+                value: {
+                  singleSelectOptionId: $option
+                }
+              }) {
+                projectV2Item {
+                  id
                 }
               }
-            `;
-            await github.graphql(mutation, {
-              projectId: projectId,
-              itemId: itemId,
-              statusFieldId: statusFieldId,
-              optionId: noAssigneeOptionId
-            });
+            }' -f project=$PROJECT_ID -f item=$ITEM_ID -f field=$STATUS_FIELD_ID -f option=$NO_ASSIGNEE_OPTION_ID --silent
