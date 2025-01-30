@@ -43,22 +43,21 @@ jobs:
           GH_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         run: |
           item_id=$(gh api graphql -f query='
-            query($issue: ID!) {
-              node(id: $issue) {
+            query($nodeId: ID!) {
+              node(id: $nodeId) {
                 ... on Issue {
-                  projectCards(first: 1) {
+                  projectItems(first: 1) {
                     nodes {
-                      project {
-                        id
-                      }
+                      id
                     }
                   }
                 }
               }
-            } -f project=${{ env.PROJECT_ID }} -f content=${{ github.event.issue.node_id }} --jq '.data.addProjectV2ItemById.item.id')
-            
+            }
+          ' -f nodeId=${{ github.event.issue.node_id }} --jq '.data.node.projectItems.nodes[0].id')
+
           gh api graphql -f query='
-            mutation($project: ID!, $item: ID!, $field: ID!, $option: String!) {
+            mutation($project: ID!, $item: ID!, $field: ID!, $option: ID!) {
               updateProjectV2ItemFieldValue(input: {
                 projectId: $project
                 itemId: $item
@@ -72,4 +71,4 @@ jobs:
                 }
               }
             }
-          ' -F project=${{ env.PROJECT_ID }} -f item=$item_id -F field=${{ env.STATUS_FIELD_ID }} -F option=${{ env.TODO_OPTION_ID }} --silent
+          ' -F project=${{ env.PROJECT_ID }} -F item=$item_id -F field=${{ env.STATUS_FIELD_ID }} -F option=${{ env.TODO_OPTION_ID }} --silent
