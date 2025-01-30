@@ -19,14 +19,20 @@ jobs:
         run: |
           node -e "
           const { getOctokit, getToken } = require('@actions/github');
-          const token = await getToken({
-            appId: process.env.APP_ID,
-            privateKey: process.env.PRIVATE_KEY,
-            installationId: process.env.INSTALLATION_ID
-          });
-          console.log(`::set-output name=token::${token}`);
+          (async () => {
+            try {
+              const token = await getToken({
+                appId: process.env.APP_ID,
+                privateKey: process.env.PRIVATE_KEY,
+                installationId: process.env.INSTALLATION_ID
+              });
+              console.log(`token=${token}` >> $GITHUB_OUTPUT);
+            } catch (error) {
+              console.error('Error getting token:', error);
+              process.exit(1);
+            }
+          })();
           "
-
       - name: Get Project Info
         uses: actions/github-script@v6
         id: get-project-info
