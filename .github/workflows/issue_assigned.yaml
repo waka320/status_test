@@ -57,4 +57,4 @@ jobs:
                 }
               }
             }
-          ' -f project=${{ env.PROJECT_ID }} -f item=${{ github.event.issue.node_id }} -f field=${{ env.STATUS_FIELD_ID }} -f option=${{ env.TODO_OPTION_ID }} --silent
+          ' -F project=${{ env.PROJECT_ID }} -F item=${{ github.event.issue.node_id }} -F field=${{ env.STATUS_FIELD_ID }} -F option=${{ env.TODO_OPTION_ID }} --silent
