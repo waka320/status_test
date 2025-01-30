@@ -55,7 +55,8 @@ jobs:
                   }
                 }
               }
-            }
+            } -f project=${{ env.PROJECT_ID }} -f content=${{ github.event.issue.node_id }} --jq '.data.addProjectV2ItemById.item.id')
+            
           gh api graphql -f query='
             mutation($project: ID!, $item: ID!, $field: ID!, $option: String!) {
               updateProjectV2ItemFieldValue(input: {
