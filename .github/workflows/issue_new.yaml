@@ -11,35 +11,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v2
 
-      - name: Install dependencies
-        run: npm install @octokit/auth-app
-
-      - name: Get GitHub App Token
-        id: get-github-app-token
-        run: |
-          node -e "
-          const { createAppAuth } = require('@octokit/auth-app');
-          (async () => {
-            try {
-              const auth = createAppAuth({
-                appId: process.env.APP_ID,
-                privateKey: process.env.PRIVATE_KEY,
-                installationId: process.env.INSTALLATION_ID
-              });
-              const { token } = await auth({ type: 'installation' });
-              console.log(`::set-output name=token::${token}`);
-            } catch (error) {
-              console.error('Error getting token:', error);
-              process.exit(1);
-            }
-          })();
-          "
+      - name: Generate Token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          installation-id: ${{ secrets.INSTALLATION_ID }}
 
       - name: Get Project Info
         uses: actions/github-script@v6
         id: get-project-info
         with:
-          github-token: ${{ steps.get-github-app-token.outputs.token }}
+          github-token: ${{ steps.app-token.outputs.token }}
           script: |
             const query = `
               query($login: String!, $projectNumber: Int!) {
@@ -75,7 +59,7 @@ jobs:
         uses: actions/github-script@v6
         id: add-to-project
         with:
-          github-token: ${{ steps.get-github-app-token.outputs.token }}
+          github-token: ${{ steps.app-token.outputs.token }}
           script: |
             const { projectId } = ${{ steps.get-project-info.outputs.result }};
             const mutation = `
@@ -99,7 +83,7 @@ jobs:
       - name: Update Issue Status
         uses: actions/github-script@v6
         with:
-          github-token: ${{ steps.get-github-app-token.outputs.token }}
+          github-token: ${{ steps.app-token.outputs.token }}
           script: |
             const { projectId, statusFieldId, noAssigneeOptionId } = ${{ steps.get-project-info.outputs.result }};
             const itemId = ${{ steps.add-to-project.outputs.result }};
