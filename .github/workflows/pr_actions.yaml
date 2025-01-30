@@ -2,7 +2,7 @@ name: Set PR and Issue on PR Actions
 
 on:
   pull_request:
-    types: [opened, edited ,ready_for_review, closed, reopened, synchronize]
+    types: [ready_for_review, closed]
   pull_request_review:
     types: [submitted]
 
@@ -40,44 +40,12 @@ jobs:
               }
             }
           ' -F projectNumber=2)
+
           echo "PROJECT_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.id')" >> $GITHUB_ENV
-          echo "STATUS_FIELD_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name=="Status") | .id')" >> $GITHUB_ENV
-          echo "TODO_OPTION_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name=="Status") | .options[] | select(.name=="Todo") | .id')" >> $GITHUB_ENV
+          echo "STATUS_FIELD_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name == "Status") | .id')" >> $GITHUB_ENV
           echo "IN_REVIEW_OPTION_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name == "Status") | .options[] | select(.name == "In Review") | .id')" >> $GITHUB_ENV
           echo "TO_BE_MERGED_OPTION_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name == "Status") | .options[] | select(.name == "To be Merged") | .id')" >> $GITHUB_ENV
           echo "DONE_OPTION_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name == "Status") | .options[] | select(.name == "Done") | .id')" >> $GITHUB_ENV
-
-      - name: Update PR Status
-        env:
-          GH_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
-        run: |
-          pr_id=$(gh api graphql -f query='
-            query($nodeId: ID!) {
-              node(id: $nodeId) {
-                ... on PullRequest {
-                  id
-                }
-              }
-            }
-          ' -f nodeId="${{ github.event.pull_request.node_id }}" --jq '.data.node.id')
-          if [[ -z "$TODO_OPTION_ID" ]]; then
-            echo "TODO_OPTION_ID is not set"
-            exit 1
-          fi
-
-          gh api graphql -f mutation='
-            mutation($projectId: ID!, $itemId: ID!, $statusFieldId: ID!, $optionId: String!) {
-              updateProjectV2ItemFieldValue(input: {
-                projectId: $projectId
-                itemId: $itemId
-                fieldId: $statusFieldId
-                value: { singleSelectOptionId: $optionId }
-              }) {
-                projectV2Item {
-                  id
-                }
-              }
-            }' -f projectId="PVT_kwHOBjwuqc4AxGNS" -f itemId="$pr_id" -f statusFieldId="PVTSSF_lAHOBjwuqc4AxGNSzgnQ01I" -f optionId="$TODO_OPTION_ID
 
       - name: Update PR and Issue Status
         env:
