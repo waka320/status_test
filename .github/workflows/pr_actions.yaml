@@ -60,8 +60,8 @@ jobs:
               }
             }
           ' -f nodeId="${{ github.event.pull_request.node_id }}" --jq '.data.node.id')
-          gh api graphql -f query='
-            mutation($projectId: ID!, $itemId: ID!, $statusFieldId: ID!, $optionId: ID!) {
+          gh api graphql -f mutation='
+            mutation($projectId: ID!, $itemId: ID!, $statusFieldId: ID!, $optionId: String!) {
               updateProjectV2ItemFieldValue(input: {
                 projectId: $projectId
                 itemId: $itemId
@@ -72,7 +72,7 @@ jobs:
                   id
                 }
               }
-            }' -F projectId=${{ env.PROJECT_ID }} -F itemId=$pr_id -F statusFieldId=${{ env.STATUS_FIELD_ID }} -F optionId=${{ env.TODO_OPTION_ID }}
+            }' -f projectId="${{ env.PROJECT_ID }}" -f itemId="$pr_id" -f statusFieldId="${{ env.STATUS_FIELD_ID }}" -f optionId="${{ env.TODO_OPTION_ID }}"
 
       - name: Update PR and Issue Status
         env:
