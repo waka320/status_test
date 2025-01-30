@@ -18,6 +18,7 @@ jobs:
       - name: Get Project Info
         env:
           GH_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          PROJECT_NUMBER: 2
         run: |
           project_data=$(gh api graphql -f query='
             query($projectNumber: Int!) {
@@ -39,13 +40,13 @@ jobs:
                 }
               }
             }
-          ' -F projectNumber=2)
+          ' -F projectNumber=$PROJECT_NUMBER)
 
-          echo "PROJECT_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.id')" >> $GITHUB_ENV
-          echo "STATUS_FIELD_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name == "Status") | .id')" >> $GITHUB_ENV
-          echo "IN_REVIEW_OPTION_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name == "Status") | .options[] | select(.name == "In Review") | .id')" >> $GITHUB_ENV
-          echo "TO_BE_MERGED_OPTION_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name == "Status") | .options[] | select(.name == "To be Merged") | .id')" >> $GITHUB_ENV
-          echo "DONE_OPTION_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name == "Status") | .options[] | select(.name == "Done") | .id')" >> $GITHUB_ENV
+          echo 'PROJECT_ID='$(echo "$project_data" | jq -r '.data.viewer.projectV2.id') >> $GITHUB_ENV
+          echo 'STATUS_FIELD_ID='$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name == "Status") | .id') >> $GITHUB_ENV
+          echo 'IN_REVIEW_OPTION_ID='$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name == "Status") | .options[] | select(.name == "In Review") | .id') >> $GITHUB_ENV
+          echo 'TO_BE_MERGED_OPTION_ID='$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name == "Status") | .options[] | select(.name == "To be Merged") | .id') >> $GITHUB_ENV
+          echo 'DONE_OPTION_ID='$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name == "Status") | .options[] | select(.name == "Done") | .id') >> $GITHUB_ENV
 
       - name: Update PR and Issue Status
         env:
@@ -54,7 +55,7 @@ jobs:
           update_status() {
             local item_id=$1
             local option_id=$2
-            gh api graphql -f query='
+            response=$(gh api graphql -f query='
               mutation($project: ID!, $item: ID!, $field: ID!, $option: String!) {
                 updateProjectV2ItemFieldValue(input: {
                   projectId: $project
@@ -69,17 +70,40 @@ jobs:
                   }
                 }
               }
-            ' -f project=${{ env.PROJECT_ID }} -f item=$item_id -F field=${{ env.STATUS_FIELD_ID }} -f option=$option_id --silent
+            ' -f project=${{ env.PROJECT_ID }} -f item=$item_id -F field=${{ env.STATUS_FIELD_ID }} -f option=$option_id --jq '.')
+
+            if echo "$response" | jq -e '.errors' > /dev/null; then
+              echo "Error updating status: $(echo "$response" | jq -r '.errors[0].message')"
+              return 1
+            fi
+          }
+
+          add_to_project() {
+            local content_id=$1
+            item_id="$(gh api graphql -f query='
+              mutation($project:ID!, $content:ID!) {
+                addProjectV2ItemById(input: {projectId: $project, contentId: $content}) {
+                  item {
+                    id
+                  }
+                }
+              }
+            ' -f project=${{ env.PROJECT_ID }} -f content=$content_id --jq '.data.addProjectV2ItemById.item.id')"
+            echo $item_id
           }
 
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            pr_node_id="${{ github.event.pull_request.node_id }}"
+            item_id=$(add_to_project $pr_node_id)
             if [[ "${{ github.event.pull_request.merged }}" == "true" ]]; then
-              update_status "${{ github.event.pull_request.node_id }}" "${{ env.DONE_OPTION_ID }}"
+              update_status "$item_id" "${{ env.DONE_OPTION_ID }}"
             elif [[ "${{ github.event.action }}" == "ready_for_review" ]]; then
-              update_status "${{ github.event.pull_request.node_id }}" "${{ env.IN_REVIEW_OPTION_ID }}"
+              update_status "$item_id" "${{ env.IN_REVIEW_OPTION_ID }}"
             fi
           elif [[ "${{ github.event_name }}" == "pull_request_review" && "${{ github.event.review.state }}" == "approved" ]]; then
-            update_status "${{ github.event.pull_request.node_id }}" "${{ env.TO_BE_MERGED_OPTION_ID }}"
+            pr_node_id="${{ github.event.pull_request.node_id }}"
+            item_id=$(add_to_project $pr_node_id)
+            update_status "$item_id" "${{ env.TO_BE_MERGED_OPTION_ID }}"
           fi
 
           issue_number=$(echo "${{ github.event.pull_request.body }}" | grep -oP '#\K\d+')
@@ -93,5 +117,6 @@ jobs:
                 }
               }
             ' -F owner=${{ github.repository_owner }} -F repo=${{ github.event.repository.name }} -F number=$issue_number --jq '.data.repository.issue.id')
-            update_status "$issue_node_id" "${{ env.STATUS_FIELD_ID }}"
+            issue_item_id=$(add_to_project $issue_node_id)
+            update_status "$issue_item_id" "${{ env.STATUS_FIELD_ID }}"
           fi
