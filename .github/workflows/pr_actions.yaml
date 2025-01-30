@@ -16,119 +16,82 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Get Project Info
-        uses: actions/github-script@v6
-        id: get-project-info
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const query = `
-              query($login: String!, $projectNumber: Int!) {
-                user(login: $login) {
-                  projectV2(number: $projectNumber) {
-                    id
-                    fields(first: 20) {
-                      nodes {
-                        ... on ProjectV2SingleSelectField {
+        env:
+          GH_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+        run: |
+          project_data=$(gh api graphql -f query='
+            query($projectNumber: Int!) {
+              viewer {
+                projectV2(number: $projectNumber) {
+                  id
+                  fields(first: 20) {
+                    nodes {
+                      ... on ProjectV2SingleSelectField {
+                        id
+                        name
+                        options {
                           id
                           name
-                          options {
-                            id
-                            name
-                          }
                         }
                       }
                     }
                   }
                 }
               }
-            `;
-
-            try {
-              const result = await github.graphql(query, {
-                login: 'waka320',
-                projectNumber: 2
-              });
-
-              console.log("GraphQL Query Result:", JSON.stringify(result, null, 2));
-
-              if (!result.user.projectV2) {
-                throw new Error(`ProjectV2 with number 2 not found in user ${context.repo.owner}`);
-              }
-
-              const projectId = result.user.projectV2.id;
-              const statusField = result.user.projectV2.fields.nodes.find(field => field.name === "Status");
-
-              if (!statusField) {
-                throw new Error(`Status field not found in project ${projectId}`);
-              }
-
-              return { projectId, statusFieldId: statusField.id, statusOptions: statusField.options };
-            } catch (error) {
-              console.error("Error executing GraphQL query:", error);
-              throw error;
             }
+          ' -F projectNumber=2)
+
+          echo "PROJECT_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.id')" >> $GITHUB_ENV
+          echo "STATUS_FIELD_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name == "Status") | .id')" >> $GITHUB_ENV
+          echo "IN_REVIEW_OPTION_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name == "Status") | .options[] | select(.name == "In Review") | .id')" >> $GITHUB_ENV
+          echo "TO_BE_MERGED_OPTION_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name == "Status") | .options[] | select(.name == "To be Merged") | .id')" >> $GITHUB_ENV
+          echo "DONE_OPTION_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name == "Status") | .options[] | select(.name == "Done") | .id')" >> $GITHUB_ENV
 
       - name: Update PR and Issue Status
-        uses: actions/github-script@v6
-        with:
-          github-token: ${{secrets.GITHUB_TOKEN}}
-          script: |
-            const { projectId, statusFieldId, statusOptions } = ${{ steps.get-project-info.outputs.result }};
-
-            let newStatus;
-            if (context.eventName === 'pull_request') {
-              if (context.payload.pull_request.merged) {
-                newStatus = "Done";
-              } else if (context.payload.action === 'ready_for_review') {
-                newStatus = "In Review";
-              }
-            } else if (context.eventName === "pull_request_review" && context.payload.review.state === "approved") {
-              newStatus = "To be Merged";
-            }
-
-            if (!newStatus) {
-              console.log("No status update");
-              return;
-            }
-
-            const statusOptionId = statusOptions.find(option => option.name === newStatus)?.id;
-
-            const updateStatus = async (itemId) => {
-              const mutation = `
-                mutation($projectId: ID!, $itemId: ID!, $statusFieldId: ID!, $optionId: String!) {
-                  updateProjectV2ItemFieldValue(input: {
-                    projectId: $projectId
-                    itemId: $itemId
-                    fieldId: $statusFieldId
-                    value: {
-                      singleSelectOptionId: $optionId
-                    }
-                  }) {
-                    projectV2Item {
-                      id
-                    }
+        env:
+          GH_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+        run: |
+          update_status() {
+            local item_id=$1
+            local option_id=$2
+            gh api graphql -f query='
+              mutation($project: ID!, $item: ID!, $field: ID!, $option: String!) {
+                updateProjectV2ItemFieldValue(input: {
+                  projectId: $project
+                  itemId: $item
+                  fieldId: $field
+                  value: {
+                    singleSelectOptionId: $option
+                  }
+                }) {
+                  projectV2Item {
+                    id
                   }
                 }
-              `;
-              await github.graphql(mutation, {
-                projectId: projectId,
-                itemId: itemId,
-                statusFieldId: statusFieldId,
-                optionId: statusOptionId
-              });
-            };
+              }
+            ' -F project=${{ env.PROJECT_ID }} -F item=$item_id -F field=${{ env.STATUS_FIELD_ID }} -F option=$option_id --silent
+          }
 
-            // PRステータス更新
-            await updateStatus(context.payload.pull_request.node_id);
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            if [[ "${{ github.event.pull_request.merged }}" == "true" ]]; then
+              update_status "${{ github.event.pull_request.node_id }}" "${{ env.DONE_OPTION_ID }}"
+            elif [[ "${{ github.event.action }}" == "ready_for_review" ]]; then
+              update_status "${{ github.event.pull_request.node_id }}" "${{ env.IN_REVIEW_OPTION_ID }}"
+            fi
+          elif [[ "${{ github.event_name }}" == "pull_request_review" && "${{ github.event.review.state }}" == "approved" ]]; then
+            update_status "${{ github.event.pull_request.node_id }}" "${{ env.TO_BE_MERGED_OPTION_ID }}"
+          fi
 
-            // Issueステータス更新
-            const issueNumberMatch = context.payload.pull_request.body.match(/#(\d+)/);
-            const issueNumber = issueNumberMatch ? issueNumberMatch[1] : null;
-            if (issueNumber) {
-              const { data: issue } = await github.rest.issues.get({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: parseInt(issueNumber, 10)
-              });
-              await updateStatus(issue.node_id);
-            }
+          issue_number=$(echo "${{ github.event.pull_request.body }}" | grep -oP '#\K\d+')
+          if [[ -n "$issue_number" ]]; then
+            issue_node_id=$(gh api graphql -f query='
+              query($owner: String!, $repo: String!, $number: Int!) {
+                repository(owner: $owner, name: $repo) {
+                  issue(number: $number) {
+                    id
+                  }
+                }
+              }
+            ' -F owner=${{ github.repository_owner }} -F repo=${{ github.event.repository.name }} -F number=$issue_number --jq '.data.repository.issue.id')
+            update_status "$issue_node_id" "${{ env.STATUS_FIELD_ID }}"
+          fi
