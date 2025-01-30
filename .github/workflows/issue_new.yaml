@@ -15,8 +15,8 @@ jobs:
           github-token: ${{secrets.GITHUB_TOKEN}}
           script: |
             const query = `
-              query($org: String!, $projectNumber: Int!) {
-                organization(login: $org) {
+              query($login: String!, $projectNumber: Int!) {
+                user(login: $login) {
                   projectV2(number: $projectNumber) {
                     id
                     fields(first: 20) {
@@ -36,11 +36,11 @@ jobs:
               }
             `;
             const result = await github.graphql(query, {
-              org: "hoge",
+              login: "waka320",
               projectNumber: 2
             });
-            const projectId = result.organization.projectV2.id;
-            const statusField = result.organization.projectV2.fields.nodes.find(field => field.name === "Status");
+            const projectId = result.user.projectV2.id;
+            const statusField = result.user.projectV2.fields.nodes.find(field => field.name === "Status");
             const noAssigneeOption = statusField.options.find(option => option.name === "No Assignee");
             return { projectId, statusFieldId: statusField.id, noAssigneeOptionId: noAssigneeOption.id };
 

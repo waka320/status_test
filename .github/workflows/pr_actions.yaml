@@ -12,25 +12,18 @@ permissions:
   repository-projects: write
 
 jobs:
-  update_status:
+  update_project_item:
     runs-on: ubuntu-latest
     steps:
-      - name: Generate Token
-        id: app-token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-
       - name: Get Project Info
         uses: actions/github-script@v6
         id: get-project-info
         with:
-          token: ${{ steps.app-token.outputs.token }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const query = `
-              query($org: String!, $projectNumber: Int!) {
-                organization(login: $org) {
+              query($login: String!, $projectNumber: Int!) {
+                user(login: $login) {
                   projectV2(number: $projectNumber) {
                     id
                     fields(first: 20) {
@@ -52,18 +45,18 @@ jobs:
 
             try {
               const result = await github.graphql(query, {
-                org: 'hoge',
+                login: 'waka320',
                 projectNumber: 2
               });
 
               console.log("GraphQL Query Result:", JSON.stringify(result, null, 2));
 
-              if (!result.organization.projectV2) {
-                throw new Error(`ProjectV2 with number 4 not found in organization ${context.repo.owner}`);
+              if (!result.user.projectV2) {
+                throw new Error(`ProjectV2 with number 2 not found in user ${context.repo.owner}`);
               }
 
-              const projectId = result.organization.projectV2.id;
-              const statusField = result.organization.projectV2.fields.nodes.find(field => field.name === "Status");
+              const projectId = result.user.projectV2.id;
+              const statusField = result.user.projectV2.fields.nodes.find(field => field.name === "Status");
 
               if (!statusField) {
                 throw new Error(`Status field not found in project ${projectId}`);
