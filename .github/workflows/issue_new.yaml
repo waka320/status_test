@@ -2,7 +2,7 @@ name: Set Issue to No Assignee when New
 
 on:
   issues:
-    types: [opened]
+    types: [opened, reopened]
 
 jobs:
   update_project_item:
