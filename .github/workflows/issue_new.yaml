@@ -1,0 +1,100 @@
+name: Set Issue to No Assignee when New
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  update_project_item:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get Project Info
+        uses: actions/github-script@v6
+        id: get-project-info
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            const query = `
+              query($org: String!, $projectNumber: Int!) {
+                organization(login: $org) {
+                  projectV2(number: $projectNumber) {
+                    id
+                    fields(first: 20) {
+                      nodes {
+                        ... on ProjectV2SingleSelectField {
+                          id
+                          name
+                          options {
+                            id
+                            name
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            `;
+            const result = await github.graphql(query, {
+              org: "hoge",
+              projectNumber: 2
+            });
+            const projectId = result.organization.projectV2.id;
+            const statusField = result.organization.projectV2.fields.nodes.find(field => field.name === "Status");
+            const noAssigneeOption = statusField.options.find(option => option.name === "No Assignee");
+            return { projectId, statusFieldId: statusField.id, noAssigneeOptionId: noAssigneeOption.id };
+
+      - name: Add Issue to Project
+        uses: actions/github-script@v6
+        id: add-to-project
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            const { projectId } = ${{ steps.get-project-info.outputs.result }};
+            const mutation = `
+              mutation($projectId: ID!, $contentId: ID!) {
+                addProjectV2ItemById(input: {
+                  projectId: $projectId
+                  contentId: $contentId
+                }) {
+                  item {
+                    id
+                  }
+                }
+              }
+            `;
+            const result = await github.graphql(mutation, {
+              projectId: projectId,
+              contentId: context.payload.issue.node_id
+            });
+            return result.addProjectV2ItemById.item.id;
+
+      - name: Update Issue Status
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            const { projectId, statusFieldId, noAssigneeOptionId } = ${{ steps.get-project-info.outputs.result }};
+            const itemId = ${{ steps.add-to-project.outputs.result }};
+            const mutation = `
+              mutation($projectId: ID!, $itemId: ID!, $statusFieldId: ID!, $optionId: String!) {
+                updateProjectV2ItemFieldValue(input: {
+                  projectId: $projectId
+                  itemId: $itemId
+                  fieldId: $statusFieldId
+                  value: {
+                    singleSelectOptionId: $optionId
+                  }
+                }) {
+                  projectV2Item {
+                    id
+                  }
+                }
+              }
+            `;
+            await github.graphql(mutation, {
+              projectId: projectId,
+              itemId: itemId,
+              statusFieldId: statusFieldId,
+              optionId: noAssigneeOptionId
+            });

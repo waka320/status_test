@@ -1,0 +1,73 @@
+name: Set Issue to ToDo when Assigned
+
+on:
+  issues:
+    types: [assigned]
+
+jobs:
+  update_project_item:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get Project Info
+        uses: actions/github-script@v6
+        id: get-project-info
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            const query = `
+              query($org: String!, $projectNumber: Int!) {
+                organization(login: $org) {
+                  projectV2(number: $projectNumber) {
+                    id
+                    fields(first: 20) {
+                      nodes {
+                        ... on ProjectV2SingleSelectField {
+                          id
+                          name
+                          options {
+                            id
+                            name
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            `;
+            const result = await github.graphql(query, {
+              org: "hoge",
+              projectNumber: 2
+            });
+            const projectId = result.organization.projectV2.id;
+            const statusField = result.organization.projectV2.fields.nodes.find(field => field.name === "Status");
+            const toDoOption = statusField.options.find(option => option.name === "To Do");
+            return { projectId, statusFieldId: statusField.id, toDoOptionId: toDoOption.id };
+
+
+      - name: Update Issue Status
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            const { projectId, statusFieldId, toDoOptionId } = ${{ steps.get-project-info.outputs.result }};
+            const mutation = `
+              mutation($projectId: ID!, $itemId: ID!, $statusFieldId: ID!, $optionId: String!) {
+                updateProjectV2ItemFieldValue(input: {
+                  projectId: $projectId
+                  itemId: $itemId
+                  fieldId: $statusFieldId
+                  value: $optionId
+                }) {
+                  projectV2Item {
+                    id
+                  }
+                }
+              }
+            `;
+            await github.graphql(mutation, {
+              projectId: projectId,
+              itemId: context.payload.issue.node_id,
+              statusFieldId: statusFieldId,
+              optionId: toDoOptionId
+            });
