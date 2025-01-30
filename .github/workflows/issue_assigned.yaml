@@ -45,12 +45,12 @@ jobs:
           GH_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         run: |
           gh api graphql -f query='
-            mutation($projectId: ID!, $itemId: ID!, $statusFieldId: ID!, $optionId: String!) {
+            mutation($projectId: ID!, $itemId: ID!, $statusFieldId: ID!, $optionId: ID!) {
               updateProjectV2ItemFieldValue(input: {
                 projectId: $projectId
                 itemId: $itemId
                 fieldId: $statusFieldId
-                value: $optionId
+                value: { singleSelectOptionId: $optionId }
               }) {
                 projectV2Item {
                   id
