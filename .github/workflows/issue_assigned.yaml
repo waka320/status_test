@@ -57,7 +57,7 @@ jobs:
           ' -f nodeId=${{ github.event.issue.node_id }} --jq '.data.node.projectItems.nodes[0].id')
 
           gh api graphql -f query='
-            mutation($project: ID!, $item: ID!, $field: ID!, $option: ID!) {
+            mutation($project: ID!, $item: ID!, $field: ID!, $option: String!) {
               updateProjectV2ItemFieldValue(input: {
                 projectId: $project
                 itemId: $item
