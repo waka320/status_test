@@ -42,7 +42,7 @@ jobs:
           ' -F projectNumber=2)
           echo "PROJECT_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.id')" >> $GITHUB_ENV
           echo "STATUS_FIELD_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name=="Status") | .id')" >> $GITHUB_ENV
-          echo "TODO_OPTION_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name=="Status") | .options[] | select(.name=="To Do") | .id')" >> $GITHUB_ENV
+          echo "TODO_OPTION_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name=="Status") | .options[] | select(.name=="Todo") | .id')" >> $GITHUB_ENV
           echo "IN_REVIEW_OPTION_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name == "Status") | .options[] | select(.name == "In Review") | .id')" >> $GITHUB_ENV
           echo "TO_BE_MERGED_OPTION_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name == "Status") | .options[] | select(.name == "To be Merged") | .id')" >> $GITHUB_ENV
           echo "DONE_OPTION_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name == "Status") | .options[] | select(.name == "Done") | .id')" >> $GITHUB_ENV
@@ -64,7 +64,7 @@ jobs:
             echo "TODO_OPTION_ID is not set"
             exit 1
           fi
-          
+
           gh api graphql -f mutation='
             mutation($projectId: ID!, $itemId: ID!, $statusFieldId: ID!, $optionId: String!) {
               updateProjectV2ItemFieldValue(input: {
@@ -78,7 +78,7 @@ jobs:
                 }
               }
             }' -f projectId="PVT_kwHOBjwuqc4AxGNS" -f itemId="$pr_id" -f statusFieldId="PVTSSF_lAHOBjwuqc4AxGNSzgnQ01I" -f optionId="$TODO_OPTION_ID
-          
+
       - name: Update PR and Issue Status
         env:
           GH_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
