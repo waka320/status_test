@@ -69,7 +69,7 @@ jobs:
                   }
                 }
               }
-            ' -F project=${{ env.PROJECT_ID }} -F item=$item_id -F field=${{ env.STATUS_FIELD_ID }} -F option=$option_id --silent
+            ' -f project=${{ env.PROJECT_ID }} -f item=$item_id -F field=${{ env.STATUS_FIELD_ID }} -f option=$option_id --silent
           }
 
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
