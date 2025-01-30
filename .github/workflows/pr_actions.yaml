@@ -60,6 +60,11 @@ jobs:
               }
             }
           ' -f nodeId="${{ github.event.pull_request.node_id }}" --jq '.data.node.id')
+          if [[ -z "$TODO_OPTION_ID" ]]; then
+            echo "TODO_OPTION_ID is not set"
+            exit 1
+          fi
+          
           gh api graphql -f mutation='
             mutation($projectId: ID!, $itemId: ID!, $statusFieldId: ID!, $optionId: String!) {
               updateProjectV2ItemFieldValue(input: {
@@ -72,8 +77,8 @@ jobs:
                   id
                 }
               }
-            }' -f projectId="${{ env.PROJECT_ID }}" -f itemId="$pr_id" -f statusFieldId="${{ env.STATUS_FIELD_ID }}" -f optionId="${{ env.TODO_OPTION_ID }}"
-
+            }' -f projectId="PVT_kwHOBjwuqc4AxGNS" -f itemId="$pr_id" -f statusFieldId="PVTSSF_lAHOBjwuqc4AxGNSzgnQ01I" -f optionId="$TODO_OPTION_ID
+          
       - name: Update PR and Issue Status
         env:
           GH_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
