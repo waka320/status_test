@@ -2,7 +2,7 @@ name: Set PR and Issue on PR Actions
 
 on:
   pull_request:
-    types: [opened, edited ,ready_for_review, closed, reopened, synchronize]
+    types: [opened, edited, ready_for_review, closed, reopened, synchronize]
   pull_request_review:
     types: [submitted]
 
@@ -40,12 +40,9 @@ jobs:
               }
             }
           ' -F projectNumber=2)
-          projectId=$(echo "$project_data" | jq -r '.data.viewer.projectV2.id')
-          statusFieldId=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name=="Status") | .id')
-          toDoOptionId=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name=="Status") | .options[] | select(.name=="To Do") | .id')
-          echo "projectId=$projectId" >> $GITHUB_ENV
-          echo "statusFieldId=$statusFieldId" >> $GITHUB_ENV
-          echo "toDoOptionId=$toDoOptionId" >> $GITHUB_ENV
+          echo "PROJECT_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.id')" >> $GITHUB_ENV
+          echo "STATUS_FIELD_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name=="Status") | .id')" >> $GITHUB_ENV
+          echo "TODO_OPTION_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name=="Status") | .options[] | select(.name=="To Do") | .id')" >> $GITHUB_ENV
           echo "IN_REVIEW_OPTION_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name == "Status") | .options[] | select(.name == "In Review") | .id')" >> $GITHUB_ENV
           echo "TO_BE_MERGED_OPTION_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name == "Status") | .options[] | select(.name == "To be Merged") | .id')" >> $GITHUB_ENV
           echo "DONE_OPTION_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name == "Status") | .options[] | select(.name == "Done") | .id')" >> $GITHUB_ENV
@@ -75,7 +72,7 @@ jobs:
                   id
                 }
               }
-            }' -f projectId="$projectId" -f itemId="$pr_id" -f statusFieldId="$statusFieldId" -f optionId="$toDoOptionId"
+            }' -F projectId=${{ env.PROJECT_ID }} -F itemId=$pr_id -F statusFieldId=${{ env.STATUS_FIELD_ID }} -F optionId=${{ env.TODO_OPTION_ID }}
 
       - name: Update PR and Issue Status
         env:
@@ -85,7 +82,7 @@ jobs:
             local item_id=$1
             local option_id=$2
             gh api graphql -f query='
-              mutation($project: ID!, $item: ID!, $field: ID!, $option: String!) {
+              mutation($project: ID!, $item: ID!, $field: ID!, $option: ID!) {
                 updateProjectV2ItemFieldValue(input: {
                   projectId: $project
                   itemId: $item
