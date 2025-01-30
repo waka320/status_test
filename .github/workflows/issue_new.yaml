@@ -26,7 +26,6 @@ jobs:
                 privateKey: process.env.PRIVATE_KEY,
                 installationId: process.env.INSTALLATION_ID
               });
-              console.log(`token=${token}` >> $GITHUB_OUTPUT);
             } catch (error) {
               console.error('Error getting token:', error);
               process.exit(1);
