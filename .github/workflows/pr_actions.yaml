@@ -64,12 +64,12 @@ jobs:
             }
           ' -f nodeId="${{ github.event.pull_request.node_id }}" --jq '.data.node.id')
           gh api graphql -f query='
-            mutation($projectId: ID!, $itemId: ID!, $statusFieldId: ID!, $optionId: ID!) {
+            mutation($projectId: ID!, $itemId: ID!, $statusFieldId: ID!, $option: String!) {
               updateProjectV2ItemFieldValue(input: {
                 projectId: $projectId
                 itemId: $itemId
                 fieldId: $statusFieldId
-                value: { singleSelectOptionId: $optionId }
+                value: { singleSelectOption: $option }
               }) {
                 projectV2Item {
                   id
