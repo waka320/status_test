@@ -8,20 +8,13 @@ jobs:
   update_project_item:
     runs-on: ubuntu-latest
     steps:
-      - name: Generate Token
-        id: generate-token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.APP_ID }}
-          private-key: ${{ secrets.PRIVATE_KEY }}
-
       - name: Get Project Info
         env:
-          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          GH_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         run: |
           project_data=$(gh api graphql -f query='
-            query($login: String!, $projectNumber: Int!) {
-              user(login: $login) {
+            query($projectNumber: Int!) {
+              viewer {
                 projectV2(number: $projectNumber) {
                   id
                   fields(first: 20) {
@@ -38,15 +31,16 @@ jobs:
                   }
                 }
               }
-            }' -f login=waka320 -F projectNumber=2)
+            }
+          ' -F projectNumber=2)
 
-          echo 'PROJECT_ID='$(echo "$project_data" | jq -r '.data.user.projectV2.id') >> $GITHUB_ENV
-          echo 'STATUS_FIELD_ID='$(echo "$project_data" | jq -r '.data.user.projectV2.fields.nodes[] | select(.name == "Status") | .id') >> $GITHUB_ENV
-          echo 'NO_ASSIGNEE_OPTION_ID='$(echo "$project_data" | jq -r '.data.user.projectV2.fields.nodes[] | select(.name == "Status") | .options[] | select(.name == "No Assignee") | .id') >> $GITHUB_ENV
+          echo "PROJECT_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.id')" >> $GITHUB_ENV
+          echo "STATUS_FIELD_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name == "Status") | .id')" >> $GITHUB_ENV
+          echo "NO_ASSIGNEE_OPTION_ID=$(echo "$project_data" | jq -r '.data.viewer.projectV2.fields.nodes[] | select(.name == "Status") | .options[] | select(.name == "No Assignee") | .id')" >> $GITHUB_ENV
 
       - name: Add Issue to Project and Update Status
         env:
-          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          GH_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         run: |
           item_id=$(gh api graphql -f query='
             mutation($project:ID!, $content:ID!) {
@@ -55,7 +49,8 @@ jobs:
                   id
                 }
               }
-            }' -f project=${{ env.PROJECT_ID }} -f content=${{ github.event.issue.node_id }} --jq '.data.addProjectV2ItemById.item.id')
+            }
+          ' -f project=${{ env.PROJECT_ID }} -f content=${{ github.event.issue.node_id }} --jq '.data.addProjectV2ItemById.item.id')
 
           gh api graphql -f query='
             mutation($project: ID!, $item: ID!, $field: ID!, $option: String!) {
@@ -71,4 +66,5 @@ jobs:
                   id
                 }
               }
-            }' -f project=${{ env.PROJECT_ID }} -f item=$item_id -f field=${{ env.STATUS_FIELD_ID }} -f option=${{ env.NO_ASSIGNEE_OPTION_ID }} --silent
+            }
+          ' -f project=${{ env.PROJECT_ID }} -f item=$item_id -f field=${{ env.STATUS_FIELD_ID }} -f option=${{ env.NO_ASSIGNEE_OPTION_ID }} --silent
