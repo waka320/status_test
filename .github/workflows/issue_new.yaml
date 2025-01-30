@@ -47,6 +47,7 @@ jobs:
               }
             }' -f login=waka320 -F projectNumber=2 > project_data.json
 
+          cat project_data.json
           echo 'PROJECT_ID='$(jq '.data.user.projectV2.id' project_data.json) >> $GITHUB_ENV
           echo 'STATUS_FIELD_ID='$(jq '.data.user.projectV2.fields.nodes[] | select(.name== "Status") | .id' project_data.json) >> $GITHUB_ENV
           echo 'NO_ASSIGNEE_OPTION_ID='$(jq '.data.user.projectV2.fields.nodes[] | select(.name== "Status") | .options[] | select(.name=="No Assignee") |.id' project_data.json) >> $GITHUB_ENV
